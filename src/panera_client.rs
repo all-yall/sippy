@@ -170,7 +170,7 @@ impl Sippy {
         let _ : Empty = self.post(&req_path, add_item);
     }
 
-    pub fn apply_sip_club(&self, cart_id: String) {
+    pub fn apply_sip_club(&self, cart_id: &str) {
         let req_path = format!("/cart/{}/discount", cart_id);
         let sip_club_discount = DiscountReq {
             discounts: vec![

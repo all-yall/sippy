@@ -1,12 +1,7 @@
-#![allow(dead_code)]
-
 pub mod api_types;
 pub mod panera_client;
 
-const UNION_ID : i32 = 203162;
-
 use panera_client::Sippy;
-
 use clap::Parser;
 
 #[derive(Parser, Debug)]
@@ -70,9 +65,9 @@ fn main() {
                 panic!();
             }
             let cart_id = client.create_cart(location);
-            client.add_item(food, &cart_id[..], &kitchen_message[..], &prepared_for_message[..]);
-            client.apply_sip_club(cart_id);
-            //client.checkout(&cart_id);
+            client.add_item(food, &cart_id, &kitchen_message, &prepared_for_message);
+            client.apply_sip_club(&cart_id);
+            client.checkout(&cart_id);
             println!("Item ordered successfully.");
         }
     }
