@@ -68,8 +68,8 @@ impl Sippy {
     }
 
     pub fn get_menu(&self, location_id: i32) -> Vec<Optset> {
-        let mv: MenuVersion = self.get(&format!("/{}/menu/version", location_id)[..]);
-        let menu: Menu = self.get(&format!("/en-US/{}/menu/v2/{}", location_id, mv.aggregateVersion)[..]);
+        let mv: MenuVersion = self.get(&format!("/{}/menu/version", location_id));
+        let menu: Menu = self.get(&format!("/en-US/{}/menu/v2/{}", location_id, mv.aggregateVersion));
 
         let ret = menu.placards
             .into_values()
@@ -85,7 +85,7 @@ impl Sippy {
         let path = get_settings_path();
         let data = fs::read_to_string(path)
             .map_err(|e| format!("while reading file; {}", e))?;
-        let settings: Settings = serde_json::from_str(&data[..])
+        let settings: Settings = serde_json::from_str(&data)
             .map_err(|e| format!("while loading JSON; {}", e))?;
 
         self.settings = Some(settings); 
