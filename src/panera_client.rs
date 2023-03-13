@@ -188,46 +188,11 @@ impl Sippy {
         let _ : Empty = self.post(&req_path, sip_club_discount);
     }
 
-    pub fn checkout(&self, cart_id: &str, location_id: i32) {
+    pub fn checkout(&self, cart_id: &str) {
 
         let req_url = format!("/cart/{}/checkout?summary=true", cart_id);
         let data = serde_json::json!({"summary" : true});
         let _ : Empty = self.post(&req_url, data);
-
-        let creds = &self.settings.as_ref()
-                .expect("Should have creds to checkout")
-                .credentials;
-        let data = serde_json::json!(
-            {
-                "cafes": [
-                {
-                    "id": location_id,
-                    "pagerNum": 0
-                }
-            ],
-            "cartSummary": {
-            "clientType": "MOBILE_IOS",
-            "deliveryFee": "0.00",
-            "destination": "RPU",
-            "goGreen": true,
-            "languageCode": "en-US",
-            "leadTime": 10,
-            "priority": "ASAP",
-            "specialInstructions": "",
-            "tip": "0.00"
-        },
-            "customer": {
-                "email": creds.username,
-                "firstName": creds.firstName,
-                "lastName": creds.lastName,
-                "id": creds.customerId,
-                "identityProvider": "PANERA",
-            },
-            "serviceFeeSupported": true
-        });
-
-        let req_url = format!("/cart/{}", cart_id);
-        let _ : Empty = self.put(&req_url, data);
 
         let req_url = format!("/payment/v2/slot-submit/{}", cart_id);
         let checkout_req = CheckoutReq {
