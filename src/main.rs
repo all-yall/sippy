@@ -20,7 +20,9 @@ enum Action {
 
     ///Save your panera credentials for use with the order command
     Login {
-        login_packet: String
+        login_packet: String,
+        /// Customer rewards number. required to allow sip club to be applied successfully
+        loyalty_num: String,
     },
     ///Get and print the menu for the specified panera location
     Menu {
@@ -50,8 +52,8 @@ fn run() -> Result<()> {
     let args = Args::parse();
 
     match args.action {
-        Action::Login { login_packet } => {
-            if let Err(msg) = client.login(&login_packet){
+        Action::Login { login_packet, loyalty_num } => {
+            if let Err(msg) = client.login(&login_packet, loyalty_num){
                 eprintln!("Problem parsing provided login response: {}", msg);
             };
         }
@@ -71,7 +73,7 @@ fn run() -> Result<()> {
             let cart_id = client.create_cart(location)?;
             client.add_item(food, &cart_id, &kitchen_message, &prepared_for_message)?;
             client.apply_sip_club(&cart_id)?;
-            client.checkout(&cart_id)?;
+            client.checkout(&cart_id, location)?;
             println!("Item ordered successfully.");
         }
     }

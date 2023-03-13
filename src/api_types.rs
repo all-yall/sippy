@@ -31,6 +31,7 @@ pub struct Optset {
 #[derive(Deserialize, Serialize)]
 pub struct Settings {
     pub credentials: Credentials,
+    pub loyalty_num      :String,
 }
 
 #[derive(Deserialize)]

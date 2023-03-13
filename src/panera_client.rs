@@ -74,6 +74,14 @@ impl Sippy {
             .map_err(add_context("in POST >"))
     }
 
+    fn put<S: Serialize, R: DeserializeOwned>(&self, path: &str, obj: S) -> Result<R> {
+        let req = self.request(Method::PUT, path);
+        let req = req.json(&obj);
+        self.send_and_marshal(req)
+            .map_err(|e| format!("{:?}", e))
+            .map_err(add_context("in PUT >"))
+    }
+
     pub fn get_menu(&self, location_id: i32) -> Result<Vec<Optset>> {
         let mv: MenuVersion = self.get(&format!("/{}/menu/version", location_id))?;
         let menu: Menu = self.get(&format!("/en-US/{}/menu/v2/{}", location_id, mv.aggregateVersion))?;
@@ -112,11 +120,12 @@ impl Sippy {
         Ok(())
     }
 
-    pub fn login(&mut self, login_packet: &str) -> Result<()> {
+    pub fn login(&mut self, login_packet: &str, loyalty_num: String) -> Result<()> {
         let login_resp: Credentials = serde_json::from_str(login_packet)
             .map_err(|e| format!("Problem parsing JSON login response; {}", e))?;
         let settings = Settings {
             credentials: login_resp,
+            loyalty_num,
         };
         
         self.settings = Some(settings);
@@ -194,12 +203,49 @@ impl Sippy {
         Ok(())
     }
 
-    pub fn checkout(&self, cart_id: &str) -> Result<()> {
+    pub fn checkout(&self, cart_id: &str, location_id: i32) -> Result<()> {
 
         let req_url = format!("/cart/{}/checkout?summary=true", cart_id);
         let data = serde_json::json!({"summary" : true});
         let _ : Empty = self.post(&req_url, data)
             .map_err(add_context("Checking Out >"))?;
+
+        let settings = &self.settings.as_ref()
+                .expect("Should have creds to checkout");
+        let creds = &settings.credentials;
+
+        let data = serde_json::json!(
+            {
+                "cafes": [
+                {
+                    "id": location_id,
+                    "pagerNum": 0
+                }
+            ],
+            "cartSummary": {
+            "clientType": "MOBILE_IOS",
+            "deliveryFee": "0.00",
+            "destination": "RPU",
+            "goGreen": true,
+            "languageCode": "en-US",
+            "leadTime": 10,
+            "priority": "ASAP",
+            "specialInstructions": "",
+            "tip": "0.00"
+        },
+            "customer": {
+                "email": creds.username,
+                "firstName": creds.firstName,
+                "lastName": creds.lastName,
+                "id": creds.customerId,
+                "identityProvider": "PANERA",
+                "loyaltyNum": &settings.loyalty_num,
+            },
+            "serviceFeeSupported": true
+        });
+
+        let req_url = format!("/cart/{}", cart_id);
+        let _ : Empty = self.put(&req_url, data)?;
 
         let req_url = format!("/payment/v2/slot-submit/{}", cart_id);
         let checkout_req = CheckoutReq {
