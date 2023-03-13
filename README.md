@@ -12,14 +12,19 @@ tools with f12 and click on the Network tab of the newly openned window.
 Then, log into panera using the Sign in button on the page. once you
 are logged in.
 
-Search for 'auth' in the Filter URLs bar of the developer tools panel.
-right click the latest request that is left and click Copy value followed
-by Copy Response.
+Search for POST request to 'panera'.
+right click the request and click 'Copy' value followed
+by 'Copy Response'. This will be the first argument to the 
+login command.
 
-Finally, run `sippy login '<VALUE_COPIED>'` ( remember the single 
-quotes around the value). It should look something like:
+Next search for the GET request to 'rewards?cafeId=' and look
+in the response packet for the 'cardNumber'. This will be the 
+second argument to the login command.
+
+Finally, run `sippy login '<VALUE_COPIED>' '<CARD NUMBER>'` ( remember the single 
+quotes around the values). It should look something like:
 ```bash
-sippy login '{"accessToken":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", ...'
+sippy login '{"accessToken":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", ...' '123412..'
 ```
 
 Once this is run, the credentials will be stored in your config directory
