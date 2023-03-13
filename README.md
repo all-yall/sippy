@@ -65,4 +65,5 @@ checkout.
 reprovide them
 
 ## Installation
-Clone this repository and from the directory run `cargo install --path=.`
+First, install rust.
+Then, run `cargo install --git https://github.com/FunkyQChicken/sippy`.
