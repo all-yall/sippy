@@ -61,5 +61,8 @@ works for items that the sip club discount applies to.
 hard codded to A) not record payment methods and B) not provide them at
 checkout.
 
+* The credentials that are provided will expire after a few months. You will need to
+reprovide them
+
 ## Installation
 Clone this repository and from the directory run `cargo install --path=.`
