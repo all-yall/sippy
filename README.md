@@ -43,3 +43,6 @@ with the item you want, and then note the item's ID in the first
 column. 
 
 Finally, order the item with `sippy order <LOCATION-ID> <ITEM-ID>`
+
+## Installation
+Clone this repository, and from the directory run `cargo install --path=.`
