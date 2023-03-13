@@ -31,7 +31,7 @@ impl Sippy {
         headers.insert("api_token", "bcf0be75-0de6-4af0-be05-13d7470a85f2".parse().unwrap());
         headers.insert("appVersion", "4.71.0".parse().unwrap());
 		headers.insert("Content-Type", "application/json".parse().unwrap());
-		headers.insert("User-Agent", "Panera/4.69.9 (iPhone; iOS 16.2; Scale/3.00)".parse().unwrap());
+		headers.insert("User-Agent", "Panera/4.73.1 (iPhone; iOS 16.2; Scale/3.00)".parse().unwrap());
         if let Some(settings) = &self.settings {
             headers.insert("auth_token", settings.credentials.accessToken.parse().unwrap());
             headers.insert("deviceId", settings.credentials.accessToken.parse().unwrap());
@@ -46,8 +46,7 @@ impl Sippy {
         req
     }
 
-    fn get<R: DeserializeOwned>(&self, path: &str) -> R {
-        let req = self.request(Method::GET, path);
+    fn send_and_marshal<R:DeserializeOwned>(&self, req: RequestBuilder) -> R {
         let resp = req.send().expect("Error while sending request");
 
         resp.error_for_status()
@@ -56,15 +55,21 @@ impl Sippy {
             .expect("Error parsing json sent from API")
     }
 
+    fn get<R: DeserializeOwned>(&self, path: &str) -> R {
+        let req = self.request(Method::GET, path);
+        self.send_and_marshal(req)
+    }
+
     fn post<S: Serialize, R: DeserializeOwned>(&self, path: &str, obj: S) -> R {
         let req = self.request(Method::POST, path);
         let req = req.json(&obj);
-        let resp = req.send().expect("Error while sending request");
+        self.send_and_marshal(req)
+    }
 
-        resp.error_for_status()
-            .expect("Error in API response")
-            .json::<R>()
-            .expect("Error parsing json sent from API")
+    fn put<S: Serialize, R: DeserializeOwned>(&self, path: &str, obj: S) -> R {
+        let req = self.request(Method::PUT, path);
+        let req = req.json(&obj);
+        self.send_and_marshal(req)
     }
 
     pub fn get_menu(&self, location_id: i32) -> Vec<Optset> {
@@ -183,9 +188,52 @@ impl Sippy {
         let _ : Empty = self.post(&req_path, sip_club_discount);
     }
 
-    pub fn checkout(&self, cart_id: &str) {
+    pub fn checkout(&self, cart_id: &str, location_id: i32) {
+
+        let req_url = format!("/cart/{}/checkout?summary=true", cart_id);
+        let data = serde_json::json!({"summary" : true});
+        let _ : Empty = self.post(&req_url, data);
+
+        let creds = &self.settings.as_ref()
+                .expect("Should have creds to checkout")
+                .credentials;
+        let data = serde_json::json!(
+            {
+                "cafes": [
+                {
+                    "id": location_id,
+                    "pagerNum": 0
+                }
+            ],
+            "cartSummary": {
+            "clientType": "MOBILE_IOS",
+            "deliveryFee": "0.00",
+            "destination": "RPU",
+            "goGreen": true,
+            "languageCode": "en-US",
+            "leadTime": 10,
+            "priority": "ASAP",
+            "specialInstructions": "",
+            "tip": "0.00"
+        },
+            "customer": {
+                "email": creds.username,
+                "firstName": creds.firstName,
+                "lastName": creds.lastName,
+                "id": creds.customerId,
+                "identityProvider": "PANERA",
+            },
+            "serviceFeeSupported": true
+        });
+
+        let req_url = format!("/cart/{}", cart_id);
+        let _ : Empty = self.put(&req_url, data);
+
         let req_url = format!("/payment/v2/slot-submit/{}", cart_id);
         let checkout_req = CheckoutReq {
+            customer: CustomerSMS {
+                smsOptIn: false
+            },
             payment: Payment {
                 giftCards: vec![],
                 creditCards: vec![],

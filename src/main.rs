@@ -67,7 +67,7 @@ fn main() {
             let cart_id = client.create_cart(location);
             client.add_item(food, &cart_id, &kitchen_message, &prepared_for_message);
             client.apply_sip_club(&cart_id);
-            client.checkout(&cart_id);
+            client.checkout(&cart_id, location);
             println!("Item ordered successfully.");
         }
     }

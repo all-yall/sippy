@@ -143,6 +143,7 @@ pub struct FoodItem {
 
 #[derive(Serialize)]
 pub struct CheckoutReq {
+    pub customer: CustomerSMS,
     pub payment: Payment,
 }
 
@@ -151,6 +152,11 @@ pub struct Payment {
     pub giftCards: Vec<Empty>,
     pub creditCards: Vec<Empty>,
     pub campusCards: Vec<Empty>,
+}
+
+#[derive(Serialize)]
+pub struct CustomerSMS {
+    pub smsOptIn: bool
 }
 
 #[derive(Deserialize, Serialize)]
