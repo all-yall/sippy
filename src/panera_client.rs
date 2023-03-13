@@ -1,7 +1,10 @@
 use std::{fs, path::PathBuf};
 use serde::{de::DeserializeOwned, ser::Serialize};
 use reqwest::{blocking::RequestBuilder, Method};
-use crate::api_types::*;
+use crate::{
+    api_types::*,
+    error::{Result, add_context}
+};
 
 const PAN_BASE : &str = "https://services-mob.panerabread.com";
 const SETTINGS_FILE: &str = "sippy.json";
@@ -17,6 +20,7 @@ pub struct Sippy {
     client : reqwest::blocking::Client,
     settings: Option<Settings>,
 }
+
 
 impl Sippy {
     pub fn new() -> Self {
@@ -46,35 +50,33 @@ impl Sippy {
         req
     }
 
-    fn send_and_marshal<R:DeserializeOwned>(&self, req: RequestBuilder) -> R {
-        let resp = req.send().expect("Error while sending request");
+    fn send_and_marshal<R:DeserializeOwned>(&self, req: RequestBuilder) -> Result<R> {
+        let resp = req.send().map_err(add_context("Error while sending request"))?;
 
         resp.error_for_status()
-            .expect("Error in API response")
+            .map_err(add_context("Error in API response >"))?
             .json::<R>()
-            .expect("Error parsing json sent from API")
+            .map_err(add_context("Error parsing json sent from API >"))
     }
 
-    fn get<R: DeserializeOwned>(&self, path: &str) -> R {
+    fn get<R: DeserializeOwned>(&self, path: &str) -> Result<R> {
         let req = self.request(Method::GET, path);
         self.send_and_marshal(req)
+            .map_err(|e| format!("{:?}", e))
+            .map_err(add_context("In GET >"))
     }
 
-    fn post<S: Serialize, R: DeserializeOwned>(&self, path: &str, obj: S) -> R {
+    fn post<S: Serialize, R: DeserializeOwned>(&self, path: &str, obj: S) -> Result<R> {
         let req = self.request(Method::POST, path);
         let req = req.json(&obj);
         self.send_and_marshal(req)
+            .map_err(|e| format!("{:?}", e))
+            .map_err(add_context("in POST >"))
     }
 
-    fn put<S: Serialize, R: DeserializeOwned>(&self, path: &str, obj: S) -> R {
-        let req = self.request(Method::PUT, path);
-        let req = req.json(&obj);
-        self.send_and_marshal(req)
-    }
-
-    pub fn get_menu(&self, location_id: i32) -> Vec<Optset> {
-        let mv: MenuVersion = self.get(&format!("/{}/menu/version", location_id));
-        let menu: Menu = self.get(&format!("/en-US/{}/menu/v2/{}", location_id, mv.aggregateVersion));
+    pub fn get_menu(&self, location_id: i32) -> Result<Vec<Optset>> {
+        let mv: MenuVersion = self.get(&format!("/{}/menu/version", location_id))?;
+        let menu: Menu = self.get(&format!("/en-US/{}/menu/v2/{}", location_id, mv.aggregateVersion))?;
 
         let ret = menu.placards
             .into_values()
@@ -83,10 +85,10 @@ impl Sippy {
             .flat_map(|optsets| optsets.into_iter())
             .collect();
 
-        ret
+        Ok(ret)
     }
 
-    pub fn load_creds(&mut self) -> Result<(), String> {
+    pub fn load_creds(&mut self) -> Result<()> {
         let path = get_settings_path();
         let data = fs::read_to_string(path)
             .map_err(|e| format!("while reading file; {}", e))?;
@@ -98,7 +100,7 @@ impl Sippy {
         Ok(())
     }
 
-    fn save_creds(&mut self) -> Result<(), String> {
+    fn save_creds(&mut self) -> Result<()> {
         let path = get_settings_path();
         let settings = self.settings.as_ref()
             .ok_or("Can't save credentials when they were never loaded.")?;
@@ -110,7 +112,7 @@ impl Sippy {
         Ok(())
     }
 
-    pub fn login(&mut self, login_packet: &str) -> Result<(), String> {
+    pub fn login(&mut self, login_packet: &str) -> Result<()> {
         let login_resp: Credentials = serde_json::from_str(login_packet)
             .map_err(|e| format!("Problem parsing JSON login response; {}", e))?;
         let settings = Settings {
@@ -122,7 +124,7 @@ impl Sippy {
         self.save_creds()
     }
 
-    pub fn create_cart(&self, location_id: i32) -> String {
+    pub fn create_cart(&self, location_id: i32) -> Result<String> {
         let creds = &self.settings.as_ref().expect("Can't create cart when not logged in").credentials;
         let cart = Cart {
             createGroupOrder: false,
@@ -150,11 +152,11 @@ impl Sippy {
             }
         };
 
-        let cart_resp: CartResp = self.post("/cart", cart);
-        cart_resp.cartId
+        let cart_resp: CartResp = self.post("/cart", cart).map_err(add_context("Creating cart >"))?;
+        Ok(cart_resp.cartId)
     }
 
-    pub fn add_item(&self, item_id: i32, cart_id: &str,  kitchen_message: &str, prepared_for: &str)  {
+    pub fn add_item(&self, item_id: i32, cart_id: &str,  kitchen_message: &str, prepared_for: &str) -> Result<()>  {
         let item = FoodItem {
             msgKitchen: kitchen_message.to_string(),
             msgPreparedFor: prepared_for.to_string(),
@@ -172,10 +174,12 @@ impl Sippy {
 
         let req_path = format!("/v2/cart/{}/item", cart_id);
 
-        let _ : Empty = self.post(&req_path, add_item);
+        let _ : Empty = self.post(&req_path, add_item).map_err(add_context("Adding Item >"))?;
+
+        Ok(())
     }
 
-    pub fn apply_sip_club(&self, cart_id: &str) {
+    pub fn apply_sip_club(&self, cart_id: &str) -> Result<()> {
         let req_path = format!("/cart/{}/discount", cart_id);
         let sip_club_discount = DiscountReq {
             discounts: vec![
@@ -185,14 +189,17 @@ impl Sippy {
                 }
             ]
         };
-        let _ : Empty = self.post(&req_path, sip_club_discount);
+        let _ : Empty = self.post(&req_path, sip_club_discount)
+            .map_err(add_context("Applying Discount Code >"))?;
+        Ok(())
     }
 
-    pub fn checkout(&self, cart_id: &str) {
+    pub fn checkout(&self, cart_id: &str) -> Result<()> {
 
         let req_url = format!("/cart/{}/checkout?summary=true", cart_id);
         let data = serde_json::json!({"summary" : true});
-        let _ : Empty = self.post(&req_url, data);
+        let _ : Empty = self.post(&req_url, data)
+            .map_err(add_context("Checking Out >"))?;
 
         let req_url = format!("/payment/v2/slot-submit/{}", cart_id);
         let checkout_req = CheckoutReq {
@@ -206,7 +213,10 @@ impl Sippy {
             }
         };
 
-        let _: Empty = self.post(&req_url, checkout_req);
+        let _: Empty = self.post(&req_url, checkout_req)
+            .map_err(add_context("Paying For Order >"))?;
+
+        Ok(())
     }
 }
 

@@ -1,7 +1,11 @@
+pub mod error;
 pub mod api_types;
 pub mod panera_client;
 
+use std::process::exit;
+
 use panera_client::Sippy;
+use error::Result;
 use clap::Parser;
 
 #[derive(Parser, Debug)]
@@ -41,7 +45,7 @@ enum Action {
     },
 }
 
-fn main() {
+fn run() -> Result<()> {
     let mut client : Sippy = Sippy::new();
     let args = Args::parse();
 
@@ -53,7 +57,7 @@ fn main() {
         }
 
         Action::Menu { location } => {
-            client.get_menu(location).iter().for_each({|optset|
+            client.get_menu(location)?.iter().for_each({|optset|
                 println!("{:8} {:6} | {} - {}", optset.itemId, optset.price, optset.i18nName, optset.logicalName)
             });
         }
@@ -64,11 +68,25 @@ fn main() {
                 eprintln!("Make sure that you've run 'login' before.");         
                 panic!();
             }
-            let cart_id = client.create_cart(location);
-            client.add_item(food, &cart_id, &kitchen_message, &prepared_for_message);
-            client.apply_sip_club(&cart_id);
-            client.checkout(&cart_id);
+            let cart_id = client.create_cart(location)?;
+            client.add_item(food, &cart_id, &kitchen_message, &prepared_for_message)?;
+            client.apply_sip_club(&cart_id)?;
+            client.checkout(&cart_id)?;
             println!("Item ordered successfully.");
+        }
+    }
+
+    Ok(())
+}
+
+fn main() {
+    match run() {
+        Err(e) => {
+            eprintln!("Error: {}", e);
+            exit(1);
+        },
+        Ok(()) => {
+            exit(0);
         }
     }
 }
