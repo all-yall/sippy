@@ -1,17 +1,15 @@
 use std::{fs, path::PathBuf};
 use serde::{de::DeserializeOwned, ser::Serialize};
 use reqwest::{blocking::RequestBuilder, Method};
-use crate::{
-    api_types::*,
-    error::{Result, Contextable}
-};
+use crate::api_types::*;
+use anyhow::{Result, Context, anyhow};
 
 const PAN_BASE : &str = "https://services-mob.panerabread.com";
 const SETTINGS_FILE: &str = "sippy.json";
 
 fn get_settings_path() -> Result<PathBuf> {
     let mut conf_dir = dirs::config_dir()
-        .ok_or("Fatal Error: Cannot get configuration directory.")?;
+        .ok_or(anyhow!("Fatal Error: Cannot get configuration directory."))?;
     conf_dir.push(SETTINGS_FILE);
     Ok(conf_dir)
 }
@@ -51,31 +49,30 @@ impl Sippy {
     }
 
     fn send_and_marshal<R:DeserializeOwned>(&self, req: RequestBuilder) -> Result<R> {
-        let resp = req.send().add_context("Error while sending request")?;
+        let resp = req.send().context("Error while sending request")?;
 
         resp.error_for_status()
-            .map_err(|e| format!("{:?}", e))
-            .add_context("Error in API response >")?
+            .context("Bad response code from API")?
             .json::<R>()
-            .add_context("Error parsing json sent from API >")
+            .context("Error parsing json sent from API")
     }
 
     fn get<R: DeserializeOwned>(&self, path: &str) -> Result<R> {
         let req = self.request(Method::GET, path);
         self.send_and_marshal(req)
-            .add_context("In GET >")
+            .context("In GET request")
     }
 
     fn post<S: Serialize, R: DeserializeOwned>(&self, path: &str, obj: S) -> Result<R> {
         let req = self.request(Method::POST, path).json(&obj);
         self.send_and_marshal(req)
-            .add_context("in POST >")
+            .context("in POST request")
     }
 
     fn put<S: Serialize, R: DeserializeOwned>(&self, path: &str, obj: S) -> Result<R> {
         let req = self.request(Method::PUT, path).json(&obj);
         self.send_and_marshal(req)
-            .add_context("in PUT >")
+            .context("in PUT request")
     }
 
     pub fn get_menu(&self, location_id: i32) -> Result<Vec<Optset>> {
@@ -94,10 +91,10 @@ impl Sippy {
 
     pub fn load_creds(&mut self) -> Result<()> {
         let path = get_settings_path()?;
-        let data = fs::read_to_string(path)
-            .map_err(|e| format!("while reading file; {}", e))?;
+        let data = fs::read_to_string(&path)
+            .with_context(|| format!("While reading file; {}", path.display()))?;
         let settings: Settings = serde_json::from_str(&data)
-            .map_err(|e| format!("while loading JSON; {}", e))?;
+            .context("While loading JSON")?;
 
         self.settings = Some(settings); 
 
@@ -107,18 +104,18 @@ impl Sippy {
     fn save_creds(&mut self) -> Result<()> {
         let path = get_settings_path()?;
         let settings = self.settings.as_ref()
-            .ok_or("Can't save credentials when they were never loaded.")?;
+            .ok_or(anyhow!("Can't save credentials when they were never loaded."))?;
         let contents = serde_json::to_string(settings)
-            .map_err(|e| format!("Problem serializing credentials to JSON; {}", e))?;
+            .context("Problem serializing credentials to JSON;")?;
         fs::write(path, contents)
-            .map_err(|e| format!("Problem writing credentials to file; {}", e))?;
+            .context("Problem writing credentials to file;")?;
 
         Ok(())
     }
 
     pub fn login(&mut self, login_packet: &str, loyalty_num: String) -> Result<()> {
         let login_resp: Credentials = serde_json::from_str(login_packet)
-            .map_err(|e| format!("Problem parsing JSON login response; {}", e))?;
+            .context("Problem parsing JSON login response;")?;
         let settings = Settings {
             credentials: login_resp,
             loyalty_num,
@@ -131,7 +128,7 @@ impl Sippy {
 
     pub fn create_cart(&self, location_id: i32) -> Result<String> {
         let creds = &self.settings.as_ref()
-            .ok_or("Can't create cart when not logged in")?
+            .ok_or(anyhow!("Can't create cart when not logged in"))?
             .credentials;
         let cart = Cart {
             createGroupOrder: false,
@@ -160,7 +157,7 @@ impl Sippy {
         };
 
         let cart_resp: CartResp = self.post("/cart", cart)
-            .add_context("Creating cart >")?;
+            .context("Creating cart")?;
 
         Ok(cart_resp.cartId)
     }
@@ -184,7 +181,7 @@ impl Sippy {
         let req_path = format!("/v2/cart/{}/item", cart_id);
 
         let _ : Empty = self.post(&req_path, add_item)
-            .add_context("Adding Item >")?;
+            .context("Adding Item")?;
 
         Ok(())
     }
@@ -200,7 +197,7 @@ impl Sippy {
             ]
         };
         let _ : Empty = self.post(&req_path, sip_club_discount)
-            .add_context("Applying Discount Code >")?;
+            .context("Applying Discount Code")?;
         Ok(())
     }
 
@@ -209,10 +206,10 @@ impl Sippy {
         let req_url = format!("/cart/{}/checkout?summary=true", cart_id);
         let data = serde_json::json!({"summary" : true});
         let _ : Empty = self.post(&req_url, data)
-            .add_context("Checking Out >")?;
+            .context("Checking Out")?;
 
         let settings = &self.settings.as_ref()
-                .ok_or("Should have creds to checkout")?;
+                .ok_or(anyhow!("Should have creds to checkout"))?;
         let creds = &settings.credentials;
 
         let data = serde_json::json!(
@@ -261,7 +258,7 @@ impl Sippy {
         };
 
         let _: Empty = self.post(&req_url, checkout_req)
-            .add_context("Paying For Order >")?;
+            .context("Paying For Order")?;
 
         Ok(())
     }

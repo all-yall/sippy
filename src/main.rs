@@ -1,12 +1,11 @@
-pub mod error;
 pub mod api_types;
 pub mod panera_client;
 
 use std::process::exit;
 
 use panera_client::Sippy;
-use error::Result;
 use clap::Parser;
+use anyhow::Result;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -85,7 +84,7 @@ fn run() -> Result<()> {
 fn main() {
     match run() {
         Err(e) => {
-            eprintln!("Error: {}", e);
+            eprintln!("Error: {:?}", e);
             exit(1);
         },
         Ok(()) => {
