@@ -59,13 +59,13 @@ fn run() -> Result<()> {
         }
 
         Action::Menu { location } => {
-            client.get_menu(location)?.iter().for_each({|optset|
+            client.get_menu(location)?.into_iter().for_each({|optset|
                 println!("{:8} {:6} | {} - {}", optset.itemId, optset.price, optset.i18nName, optset.logicalName)
             });
         }
 
         Action::Order { location, food, kitchen_message, prepared_for_message } => {
-            if let Err(msg) = client.load_creds(){
+            if let Err(msg) = client.load_creds() {
                 eprintln!("Problem loading credentials: {}", msg);         
                 eprintln!("Make sure that you've run 'login' before.");         
                 panic!();
@@ -80,6 +80,7 @@ fn run() -> Result<()> {
 
     Ok(())
 }
+
 
 fn main() {
     match run() {
