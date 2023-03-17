@@ -1,7 +1,7 @@
 pub mod api_types;
 pub mod panera_client;
 
-use std::process::exit;
+use std::{process::exit, collections::BTreeSet};
 
 use panera_client::Sippy;
 use clap::Parser;
@@ -27,6 +27,12 @@ enum Action {
     Menu {
         /// The panera store ID. can be found on the panera website
         location: i32,
+
+        /// Do not filter the menu to only sip club elligible items.
+        /// if this isn't included, you can only view the menu while 
+        /// you have a sip club coupon available
+        #[arg(short, long)]
+        no_filter: bool,
     },
 
     ///Order the given food item (check menu) at the given location using sip club.
@@ -55,12 +61,24 @@ fn run() -> Result<()> {
                 .context("While Logging in")?;
         }
 
-        Action::Menu { location } => {
+        Action::Menu { location, no_filter} => {
             let client = Sippy::try_new()
                 .context("While creating client")?;
 
-            let items = client.get_menu(location)
+            let mut items = client.get_menu(location)
                 .context("While fetching menu items")?;
+            
+            if !no_filter {
+                let sip_club_items : BTreeSet<i32> = client
+                    .get_sip_club_items()?
+                    .into_iter()
+                    .collect();
+
+                items = items
+                    .into_iter()
+                    .filter(move |item| sip_club_items.contains(&item.itemId))
+                    .collect();
+            }
             
             items.into_iter().for_each({|optset|
                 println!("{:8} {:6} | {} - {}", optset.itemId, optset.price, optset.i18nName, optset.logicalName)
@@ -70,7 +88,10 @@ fn run() -> Result<()> {
         Action::Order { location, food, kitchen_message, prepared_for_message } => {
             let client = Sippy::try_new()
                 .context("While creating client")?;
-            
+
+            // Needs to be called to update panera that another Sip club is ready
+            client.get_sip_club_items()?; 
+
             let cart_id = client.create_cart(location)?;
             client.add_item(food, &cart_id, &kitchen_message, &prepared_for_message)?;
             client.apply_sip_club(&cart_id)?;

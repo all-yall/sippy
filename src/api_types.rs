@@ -72,6 +72,30 @@ pub struct Credentials {
     pub customerId      :i32,
 }
 
+#[derive(Deserialize)]
+pub struct Reward {
+    pub eligibleItems: Option<Vec<Item>>,
+    pub discCode: i32,
+    pub name: String,
+}
+
+#[derive(Deserialize)]
+pub enum ItemType {
+    ITEM,
+    COMBO,
+}
+
+#[derive(Deserialize)]
+pub struct Item {
+    pub itemId: i32,
+    pub itemType: ItemType,
+}
+
+#[derive(Deserialize)]
+pub struct RewardsSummary {
+    pub rewards: Vec<Reward>
+}
+
 #[derive(Serialize)]
 pub struct Customer {
     pub email: String,
@@ -84,6 +108,16 @@ pub struct Customer {
 #[derive(Serialize)]
 pub struct Cafe {
     pub id: i32,
+}
+
+#[derive(Serialize)]
+pub struct Cart {
+    pub createGroupOrder: bool,
+    pub customer:   Customer,
+    pub cafes:      Vec<Cafe>,
+    pub serviceFeeSupported: bool,
+    pub applyDynamicPricing: bool,
+    pub cartSummary: CartSummary,
 }
 
 #[derive(Serialize)]

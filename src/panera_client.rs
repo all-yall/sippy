@@ -60,9 +60,14 @@ impl Sippy {
         let mut headers = reqwest::header::HeaderMap::new();
         // This is not a private API token; it is embedded in all Panera apps
         headers.insert("api_token", "bcf0be75-0de6-4af0-be05-13d7470a85f2".parse().unwrap());
+        headers.insert("Connection", "keep-alive".parse().unwrap());
         headers.insert("appVersion", "4.71.0".parse().unwrap());
 		headers.insert("Content-Type", "application/json".parse().unwrap());
 		headers.insert("User-Agent", "Panera/4.73.1 (iPhone; iOS 16.2; Scale/3.00)".parse().unwrap());
+		headers.insert("appVersion", "4.73.1".parse().unwrap());
+		headers.insert("Accept", "*/*".parse().unwrap());
+		headers.insert("Host", "services-mob.panerabread.com".parse().unwrap());
+		headers.insert("Connection", "keep-alive".parse().unwrap());
         headers.insert("auth_token", self.settings.credentials.accessToken.parse().unwrap());
         headers.insert("deviceId", self.settings.credentials.accessToken.parse().unwrap());
         req.headers(headers)
@@ -110,6 +115,34 @@ impl Sippy {
             .filter_map(|placard| placard.optSets)
             .flat_map(|optsets| optsets.into_iter())
             .collect();
+
+        Ok(ret)
+    }
+
+    pub fn get_sip_club_items(&self) -> Result<Vec<i32>> {
+        let id = self.settings.credentials.customerId;
+        let loyalty = &self.settings.loyalty_num;
+        // note, the 500000 in this path seems to be panera's 'default cafe' that is used when no
+        // specific one is needed.
+        let req_path = format!("/users/{id}/rewards/v2/{loyalty}/500000/?customerID={id}&identify=true");
+
+        let rewards: RewardsSummary = self.get(&req_path)?;  
+
+        let sip_club_reward = rewards.rewards.
+            into_iter()
+            .find(|reward| reward.name == "Sip Club - Beverage")
+            .ok_or(anyhow::anyhow!("Sip Club discount not found (Have you waited 2 hours?)"))?;
+        
+        let ret = sip_club_reward
+            .eligibleItems
+            .expect("Sip club should contain elligble items")
+            .into_iter()
+            .filter_map(|item| 
+                match item.itemType {
+                    ItemType::ITEM => Some(item.itemId),
+                    _ => None,
+                }
+            ).collect();
 
         Ok(ret)
     }
