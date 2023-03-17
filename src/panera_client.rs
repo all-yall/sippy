@@ -2,42 +2,69 @@ use std::{fs, path::PathBuf};
 use serde::{de::DeserializeOwned, ser::Serialize};
 use reqwest::{blocking::RequestBuilder, Method};
 use crate::api_types::*;
-use anyhow::{Result, Context, anyhow};
+use anyhow::{Result, Context};
 
 const PAN_BASE : &str = "https://services-mob.panerabread.com";
 const SETTINGS_FILE: &str = "sippy.json";
 
-fn get_settings_path() -> Result<PathBuf> {
-    let mut conf_dir = dirs::config_dir()
-        .ok_or(anyhow!("Fatal Error: Cannot get configuration directory."))?;
-    conf_dir.push(SETTINGS_FILE);
-    Ok(conf_dir)
+fn get_settings_path() -> PathBuf {
+    let mut path = dirs::config_dir()
+        .expect("config dir should exist on all supported platforms");
+    path.push(SETTINGS_FILE);
+    path
+}
+
+pub fn login(login_packet: &str, loyalty_num: String) -> Result<()> {
+    let login_resp: Credentials = serde_json::from_str(login_packet)
+        .context("While parsing JSON login response (Did you select the right packet?)")?;
+
+    let settings = Settings {
+        credentials: login_resp,
+        loyalty_num,
+    };
+
+    let path = get_settings_path();
+    let contents = serde_json::to_string(&settings)
+        .expect("settings object should serialize");
+    fs::write(path, contents)
+        .context("Problem writing credentials to file (Do you have permissions?)")?;
+
+    Ok(())
+}
+
+fn load_creds() -> Result<Settings> {
+    let path = get_settings_path();
+    let data = fs::read_to_string(&path)
+        .context("While reading settings file (Make sure you've logged in before running other commands)")?;
+
+    let settings: Settings = serde_json::from_str(&data)
+        .context("While loading JSON in settings file (Try re-logging in)")?;
+
+    Ok(settings)
 }
 
 pub struct Sippy {
     client : reqwest::blocking::Client,
-    settings: Option<Settings>,
+    settings: Settings,
 }
 
 
 impl Sippy {
-    pub fn new() -> Self {
-        let settings = None;
+    pub fn try_new() -> Result<Self> {
+        let settings = load_creds()?;
         let client = reqwest::blocking::Client::new();
-        Self{client, settings}
+        Ok(Self{client, settings})
     }
 
     fn add_headers(&self, req: RequestBuilder) -> RequestBuilder {
         let mut headers = reqwest::header::HeaderMap::new();
-        // This is not a private API token; it is embedded in all Panera Apps
+        // This is not a private API token; it is embedded in all Panera apps
         headers.insert("api_token", "bcf0be75-0de6-4af0-be05-13d7470a85f2".parse().unwrap());
         headers.insert("appVersion", "4.71.0".parse().unwrap());
 		headers.insert("Content-Type", "application/json".parse().unwrap());
 		headers.insert("User-Agent", "Panera/4.73.1 (iPhone; iOS 16.2; Scale/3.00)".parse().unwrap());
-        if let Some(settings) = &self.settings {
-            headers.insert("auth_token", settings.credentials.accessToken.parse().unwrap());
-            headers.insert("deviceId", settings.credentials.accessToken.parse().unwrap());
-        }
+        headers.insert("auth_token", self.settings.credentials.accessToken.parse().unwrap());
+        headers.insert("deviceId", self.settings.credentials.accessToken.parse().unwrap());
         req.headers(headers)
     }
 
@@ -60,20 +87,18 @@ impl Sippy {
     fn get<R: DeserializeOwned>(&self, path: &str) -> Result<R> {
         let req = self.request(Method::GET, path);
         self.send_and_marshal(req)
-            .context("In GET request")
     }
 
     fn post<S: Serialize, R: DeserializeOwned>(&self, path: &str, obj: S) -> Result<R> {
         let req = self.request(Method::POST, path).json(&obj);
         self.send_and_marshal(req)
-            .context("in POST request")
     }
 
     fn put<S: Serialize, R: DeserializeOwned>(&self, path: &str, obj: S) -> Result<R> {
         let req = self.request(Method::PUT, path).json(&obj);
         self.send_and_marshal(req)
-            .context("in PUT request")
     }
+
 
     pub fn get_menu(&self, location_id: i32) -> Result<Vec<Optset>> {
         let mv: MenuVersion = self.get(&format!("/{}/menu/version", location_id))?;
@@ -89,47 +114,8 @@ impl Sippy {
         Ok(ret)
     }
 
-    pub fn load_creds(&mut self) -> Result<()> {
-        let path = get_settings_path()?;
-        let data = fs::read_to_string(&path)
-            .with_context(|| format!("While reading file; {}", path.display()))?;
-        let settings: Settings = serde_json::from_str(&data)
-            .context("While loading JSON")?;
-
-        self.settings = Some(settings); 
-
-        Ok(())
-    }
-
-    fn save_creds(&mut self) -> Result<()> {
-        let path = get_settings_path()?;
-        let settings = self.settings.as_ref()
-            .ok_or(anyhow!("Can't save credentials when they were never loaded."))?;
-        let contents = serde_json::to_string(settings)
-            .context("Problem serializing credentials to JSON;")?;
-        fs::write(path, contents)
-            .context("Problem writing credentials to file;")?;
-
-        Ok(())
-    }
-
-    pub fn login(&mut self, login_packet: &str, loyalty_num: String) -> Result<()> {
-        let login_resp: Credentials = serde_json::from_str(login_packet)
-            .context("Problem parsing JSON login response;")?;
-        let settings = Settings {
-            credentials: login_resp,
-            loyalty_num,
-        };
-        
-        self.settings = Some(settings);
-
-        self.save_creds()
-    }
-
     pub fn create_cart(&self, location_id: i32) -> Result<String> {
-        let creds = &self.settings.as_ref()
-            .ok_or(anyhow!("Can't create cart when not logged in"))?
-            .credentials;
+        let creds = &self.settings.credentials;
         let cart = Cart {
             createGroupOrder: false,
             customer: Customer { 
@@ -208,19 +194,17 @@ impl Sippy {
         let _ : Empty = self.post(&req_url, data)
             .context("Checking Out")?;
 
-        let settings = &self.settings.as_ref()
-                .ok_or(anyhow!("Should have creds to checkout"))?;
+        let settings = &self.settings;
         let creds = &settings.credentials;
 
-        let data = serde_json::json!(
-            {
-                "cafes": [
+        let data = serde_json::json!({
+            "cafes": [
                 {
                     "id": location_id,
                     "pagerNum": 0
                 }
-                ],
-                "cartSummary": {
+            ],
+            "cartSummary": {
                 "clientType": "MOBILE_IOS",
                 "deliveryFee": "0.00",
                 "destination": "RPU",
@@ -263,5 +247,4 @@ impl Sippy {
         Ok(())
     }
 }
-
 

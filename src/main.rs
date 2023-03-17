@@ -5,7 +5,7 @@ use std::process::exit;
 
 use panera_client::Sippy;
 use clap::Parser;
-use anyhow::Result;
+use anyhow::{Result, Context};
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -47,28 +47,30 @@ enum Action {
 }
 
 fn run() -> Result<()> {
-    let mut client : Sippy = Sippy::new();
     let args = Args::parse();
 
     match args.action {
         Action::Login { login_packet, loyalty_num } => {
-            if let Err(msg) = client.login(&login_packet, loyalty_num){
-                eprintln!("Problem parsing provided login response: {}", msg);
-            };
+            panera_client::login(&login_packet, loyalty_num)
+                .context("While Logging in")?;
         }
 
         Action::Menu { location } => {
-            client.get_menu(location)?.into_iter().for_each({|optset|
+            let client = Sippy::try_new()
+                .context("While creating client")?;
+
+            let items = client.get_menu(location)
+                .context("While fetching menu items")?;
+            
+            items.into_iter().for_each({|optset|
                 println!("{:8} {:6} | {} - {}", optset.itemId, optset.price, optset.i18nName, optset.logicalName)
             });
         }
 
         Action::Order { location, food, kitchen_message, prepared_for_message } => {
-            if let Err(msg) = client.load_creds() {
-                eprintln!("Problem loading credentials: {}", msg);         
-                eprintln!("Make sure that you've run 'login' before.");         
-                panic!();
-            }
+            let client = Sippy::try_new()
+                .context("While creating client")?;
+            
             let cart_id = client.create_cart(location)?;
             client.add_item(food, &cart_id, &kitchen_message, &prepared_for_message)?;
             client.apply_sip_club(&cart_id)?;
@@ -84,7 +86,7 @@ fn run() -> Result<()> {
 fn main() {
     match run() {
         Err(e) => {
-            eprintln!("Error: {:?}", e);
+            eprintln!("Error in sippy\n\n{:?}", e);
             exit(1);
         },
         Ok(()) => {

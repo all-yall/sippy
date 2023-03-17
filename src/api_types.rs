@@ -3,11 +3,17 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
+
+#[derive(Deserialize, Serialize)]
+pub struct Settings {
+    pub credentials: Credentials,
+    pub loyalty_num: String,
+}
+
 #[derive(Deserialize)]
 pub struct MenuVersion {
     pub aggregateVersion : String,
 }
-
 
 #[derive(Deserialize)]
 pub struct Menu {
@@ -19,19 +25,12 @@ pub struct Placard {
     pub optSets: Option<Vec<Optset>>
 }
 
-
 #[derive(Deserialize)]
 pub struct Optset {
     pub itemId: i32,
     pub i18nName: String,
     pub logicalName: String,
     pub price: f32,
-}
-
-#[derive(Deserialize, Serialize)]
-pub struct Settings {
-    pub credentials: Credentials,
-    pub loyalty_num      :String,
 }
 
 #[derive(Deserialize)]
@@ -71,16 +70,6 @@ pub struct Credentials {
     pub lastName        :String,
     pub firstName       :String,
     pub customerId      :i32,
-}
-
-#[derive(Serialize)]
-pub struct Cart {
-    pub createGroupOrder: bool,
-    pub customer:   Customer,
-    pub cafes:      Vec<Cafe>,
-    pub serviceFeeSupported: bool,
-    pub applyDynamicPricing: bool,
-    pub cartSummary: CartSummary,
 }
 
 #[derive(Serialize)]
@@ -162,5 +151,3 @@ pub struct CustomerSMS {
 
 #[derive(Deserialize, Serialize)]
 pub struct Empty {}
-
-
