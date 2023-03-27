@@ -81,7 +81,7 @@ fn run() -> Result<()> {
             }
             
             items.into_iter().for_each({|optset|
-                println!("{:8} {:6} | {} - {}", optset.itemId, optset.price, optset.i18nName, optset.logicalName)
+                println!("{:8} | {} - {}", optset.itemId, optset.i18nName, optset.logicalName)
             });
         }
 
